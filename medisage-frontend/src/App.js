@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, User, Heart, CheckCircle, AlertTriangle, XCircle, Plus, Search } from 'lucide-react';
+import { Upload, FileText, User, Heart, CheckCircle, AlertTriangle, XCircle, Plus, Search, Activity, Calendar, TrendingUp } from 'lucide-react';
 
 const MediSage = () => {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -8,6 +9,7 @@ const MediSage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   // API Base URL - adjust this to match your FastAPI server
   const API_BASE = 'http://localhost:8000';
@@ -113,10 +115,300 @@ const MediSage = () => {
           >
             Upload Report
           </button>
+          <button
+            onClick={() => setCurrentView('analysis')}
+            className={`px-4 py-2 rounded-lg transition-all ${
+              currentView === 'analysis' 
+                ? 'bg-white text-blue-600 shadow-md' 
+                : 'hover:bg-white/20'
+            }`}
+          >
+            Report Analysis
+          </button>
         </div>
       </div>
     </nav>
   );
+
+  // Report Analysis Component
+  const ReportAnalysis = () => {
+    const getStatusColor = (status) => {
+      switch (status) {
+        case 'Normal': return 'text-green-600 bg-green-50 border-green-200';
+        case 'High': return 'text-orange-600 bg-orange-50 border-orange-200';
+        case 'Low': return 'text-red-600 bg-red-50 border-red-200';
+        default: return 'text-gray-600 bg-gray-50 border-gray-200';
+      }
+    };
+
+    const getStatusIcon = (status) => {
+      switch (status) {
+        case 'Normal': return <CheckCircle className="h-5 w-5 text-green-500" />;
+        case 'High': return <AlertTriangle className="h-5 w-5 text-orange-500" />;
+        case 'Low': return <XCircle className="h-5 w-5 text-red-500" />;
+        default: return <Activity className="h-5 w-5 text-gray-500" />;
+      }
+    };
+
+    const getRecommendation = (param, status) => {
+      const recommendations = {
+        'WBC': {
+          'High': 'Elevated white blood cell count may indicate infection, inflammation, or immune system disorder. Consult your doctor for further evaluation.',
+          'Low': 'Low white blood cell count may indicate weakened immune system. Consider lifestyle changes and medical consultation.',
+          'Normal': 'Your white blood cell count is within normal range, indicating good immune function.'
+        },
+        'RBC': {
+          'High': 'High red blood cell count may indicate dehydration, lung disease, or blood disorders. Monitor and consult healthcare provider.',
+          'Low': 'Low red blood cell count may indicate anemia. Consider iron-rich diet and medical evaluation.',
+          'Normal': 'Your red blood cell count is normal, indicating good oxygen-carrying capacity.'
+        },
+        'HbA1c': {
+          'High': 'Elevated HbA1c indicates poor blood sugar control. Diabetes management and lifestyle changes needed.',
+          'Low': 'Very low HbA1c is rare but may indicate hypoglycemia risk. Monitor blood sugar levels.',
+          'Normal': 'Your HbA1c is in excellent range, indicating good blood sugar control.'
+        },
+        'SGPT': {
+          'High': 'Elevated SGPT/ALT indicates liver stress or damage. Avoid alcohol and consult hepatologist.',
+          'Low': 'Low SGPT is generally not concerning but may indicate B6 deficiency in rare cases.',
+          'Normal': 'Your liver enzyme levels are normal, indicating good liver health.'
+        }
+      };
+
+      return recommendations[param]?.[status] || 'No specific recommendation available. Consult your healthcare provider.';
+    };
+
+    if (!selectedReport) {
+      return (
+        <div className="p-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-8">
+              <Activity className="h-16 w-16 text-blue-500 mx-auto mb-4" />
+              <h2 className="text-3xl font-bold text-gray-800 mb-2">Report Analysis</h2>
+              <p className="text-gray-600">Select a report to view detailed analysis</p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg border p-6">
+              <h3 className="text-xl font-semibold mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-500" />
+                Available Reports
+              </h3>
+              
+              {reports.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {reports.map((report, index) => {
+                    const user = users.find(u => u.user_id === report.user_id);
+                    const labCount = Object.keys(report.lab_results || {}).length;
+                    
+                    return (
+                      <div
+                        key={index}
+                        onClick={() => setSelectedReport(report)}
+                        className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200 cursor-pointer hover:shadow-md transition-all hover:from-blue-100 hover:to-indigo-100"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <FileText className="h-8 w-8 text-blue-500 flex-shrink-0" />
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            {labCount} values
+                          </span>
+                        </div>
+                        <h4 className="font-medium text-gray-800 mb-1 truncate">
+                          {report.file_name}
+                        </h4>
+                        <p className="text-sm text-gray-600 mb-2">
+                          {user ? user.name : `User ID: ${report.user_id}`}
+                        </p>
+                        <div className="flex items-center text-xs text-gray-500">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          Report #{report.report_id}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No reports uploaded yet</p>
+                  <button
+                    onClick={() => setCurrentView('upload')}
+                    className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Upload First Report
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const user = users.find(u => u.user_id === selectedReport.user_id);
+    const labResults = selectedReport.lab_results || {};
+    const hasAbnormalValues = Object.values(labResults).some(result => result.status !== 'Normal');
+
+    return (
+      <div className="p-6">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-800 flex items-center">
+                <TrendingUp className="h-8 w-8 mr-3 text-blue-500" />
+                Report Analysis
+              </h2>
+              <p className="text-gray-600 mt-1">{selectedReport.file_name}</p>
+            </div>
+            <button
+              onClick={() => setSelectedReport(null)}
+              className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              ← Back to Reports
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Patient Info */}
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-xl shadow-lg border p-6 mb-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <User className="h-5 w-5 mr-2 text-blue-500" />
+                  Patient Information
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm text-gray-500">Name</label>
+                    <p className="font-medium">{user ? user.name : 'Unknown'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-500">Contact</label>
+                    <p className="font-medium">{user ? user.mobile_number : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-500">Role</label>
+                    <p className="font-medium capitalize">{user ? user.role : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-500">Report ID</label>
+                    <p className="font-medium">#{selectedReport.report_id}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Overall Status */}
+              <div className="bg-white rounded-xl shadow-lg border p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Activity className="h-5 w-5 mr-2 text-green-500" />
+                  Overall Status
+                </h3>
+                <div className={`p-4 rounded-lg border-2 ${hasAbnormalValues ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
+                  <div className="flex items-center mb-2">
+                    {hasAbnormalValues ? (
+                      <AlertTriangle className="h-6 w-6 text-orange-500 mr-2" />
+                    ) : (
+                      <CheckCircle className="h-6 w-6 text-green-500 mr-2" />
+                    )}
+                    <span className={`font-semibold ${hasAbnormalValues ? 'text-orange-700' : 'text-green-700'}`}>
+                      {hasAbnormalValues ? 'Attention Required' : 'All Values Normal'}
+                    </span>
+                  </div>
+                  <p className={`text-sm ${hasAbnormalValues ? 'text-orange-600' : 'text-green-600'}`}>
+                    {hasAbnormalValues 
+                      ? 'Some values are outside normal range. Please review recommendations.'
+                      : 'All lab values are within normal ranges. Great health indicators!'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Lab Results */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-xl shadow-lg border p-6 mb-6">
+                <h3 className="text-lg font-semibold mb-6 flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-purple-500" />
+                  Lab Results Analysis ({Object.keys(labResults).length} parameters)
+                </h3>
+                
+                {Object.keys(labResults).length > 0 ? (
+                  <div className="space-y-6">
+                    {Object.entries(labResults).map(([parameter, data]) => (
+                      <div key={parameter} className="border rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center">
+                            {getStatusIcon(data.status)}
+                            <div className="ml-3">
+                              <h4 className="text-lg font-semibold text-gray-800">{parameter}</h4>
+                              <p className="text-sm text-gray-500">
+                                {parameter === 'WBC' && 'White Blood Cells'}
+                                {parameter === 'RBC' && 'Red Blood Cells'}
+                                {parameter === 'HbA1c' && 'Hemoglobin A1c'}
+                                {parameter === 'SGPT' && 'Liver Enzyme (ALT)'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className={`px-3 py-1 rounded-full border ${getStatusColor(data.status)}`}>
+                            <span className="text-sm font-medium">{data.status}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div className="bg-gray-50 p-3 rounded-lg">
+                            <label className="text-xs text-gray-500 uppercase tracking-wide">Measured Value</label>
+                            <p className="text-2xl font-bold text-gray-800">
+                              {data.value} <span className="text-sm font-normal text-gray-600">{data.unit}</span>
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 p-3 rounded-lg">
+                            <label className="text-xs text-gray-500 uppercase tracking-wide">Reference Range</label>
+                            <p className="text-sm text-gray-700 mt-1">
+                              {parameter === 'WBC' && '4,000 - 11,000 /cmm'}
+                              {parameter === 'RBC' && '4.2 - 5.9 mill/cmm'}
+                              {parameter === 'HbA1c' && '4.0 - 5.6 %'}
+                              {parameter === 'SGPT' && '7 - 56 U/L'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg">
+                          <h5 className="font-medium text-blue-800 mb-2">Clinical Recommendation</h5>
+                          <p className="text-sm text-blue-700">{getRecommendation(parameter, data.status)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No lab values extracted from this report</p>
+                    <p className="text-sm text-gray-400 mt-2">The system may not have recognized standard lab parameters</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Extracted Text Preview */}
+              {selectedReport.extracted_text_preview && (
+                <div className="bg-white rounded-xl shadow-lg border p-6">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <Search className="h-5 w-5 mr-2 text-gray-500" />
+                    Extracted Text Preview
+                  </h3>
+                  <div className="bg-gray-50 p-4 rounded-lg border">
+                    <p className="text-sm text-gray-700 font-mono leading-relaxed">
+                      {selectedReport.extracted_text_preview}
+                      {selectedReport.extracted_text_preview.length === 200 && '...'}
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Showing first 200 characters of extracted text from the uploaded document
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Dashboard Component
   const Dashboard = () => (
@@ -142,7 +434,17 @@ const MediSage = () => {
           </div>
         </div>
         
-        
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border border-purple-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-600 text-sm font-medium">Analyzed Parameters</p>
+              <p className="text-3xl font-bold text-purple-800">
+                {reports.reduce((total, report) => total + Object.keys(report.lab_results || {}).length, 0)}
+              </p>
+            </div>
+            <Activity className="h-12 w-12 text-purple-500" />
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -180,7 +482,14 @@ const MediSage = () => {
           </h3>
           <div className="space-y-3">
             {reports.slice(-5).map((report, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div 
+                key={index} 
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => {
+                  setSelectedReport(report);
+                  setCurrentView('analysis');
+                }}
+              >
                 <div>
                   <p className="font-medium">{report.file_name}</p>
                   <p className="text-sm text-gray-600">User ID: {report.user_id}</p>
@@ -450,13 +759,28 @@ const MediSage = () => {
                 ? 'bg-red-50 text-red-800 border border-red-200'
                 : 'bg-blue-50 text-blue-800 border border-blue-200'
             }`}>
-              {uploadStatus === 'success' && '✅ Report uploaded and processed successfully!'}
+              {uploadStatus === 'success' && (
+                <div className="flex items-center justify-between">
+                  <span>✅ Report uploaded and processed successfully!</span>
+                  {lastUploadResult?.success && (
+                    <button
+                      onClick={() => {
+                        setSelectedReport(lastUploadResult.data);
+                        setCurrentView('analysis');
+                      }}
+                      className="ml-4 bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                    >
+                      View Analysis
+                    </button>
+                  )}
+                </div>
+              )}
               {uploadStatus === 'error' && '❌ Upload failed. Please try again.'}
               {uploadStatus === 'uploading' && '📤 Processing your report...'}
             </div>
           )}
 
-          {/* Lab Results */}
+          {/* Lab Results Preview */}
           {lastUploadResult?.success && lastUploadResult.data.lab_results && (
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
               <h3 className="font-semibold text-gray-800 mb-3">Lab Results Found:</h3>
@@ -494,6 +818,7 @@ const MediSage = () => {
         {currentView === 'dashboard' && <Dashboard />}
         {currentView === 'register' && <UserRegistration />}
         {currentView === 'upload' && <ReportUpload />}
+        {currentView === 'analysis' && <ReportAnalysis />}
       </main>
     </div>
   );

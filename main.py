@@ -209,3 +209,37 @@ async def upload_report(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+@app.get("/get-reports/")
+def get_reports(user_id: int = None, db: Session = Depends(get_db)):
+    """Get all reports or reports for a specific user with lab values"""
+    try:
+        query = db.query(Report)
+        if user_id:
+            query = query.filter(Report.user_id == user_id)
+        
+        reports = query.all()
+        result = []
+        
+        for report in reports:
+            lab_values = db.query(LabValue).filter(LabValue.report_id == report.id).all()
+            
+            lab_results = {}
+            for lab in lab_values:
+                lab_results[lab.name] = {
+                    "value": lab.value,
+                    "unit": lab.unit,
+                    "status": lab.status
+                }
+            
+            result.append({
+                "report_id": report.id,
+                "user_id": report.user_id,
+                "file_name": report.file_name,
+                "lab_results": lab_results,
+                "extracted_text_preview": "Text extracted from " + report.file_name  # Placeholder
+            })
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching reports: {str(e)}")
