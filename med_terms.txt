@@ -1,0 +1,6 @@
+WBC
+RBC
+HbA1c
+SGPT
+Platelets
+Hemoglobin

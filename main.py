@@ -1,17 +1,19 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-import os, shutil
+import os, shutil, re, cv2
 from pdfminer.high_level import extract_text
 from PIL import Image
 import pytesseract
-from models import User
-
+from models import User, Report, LabValue
 from database import SessionLocal
-from models import Report, LabValue
+
+# Tesseract path (Windows)
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 app = FastAPI()
-#homepage
+
+# homepage
 @app.get("/")
 def home():
     return {"message": "MediSage API is running 🚀"}
@@ -47,19 +49,70 @@ def analyze_value(param, value):
 def process_pdf(file_path: str):
     return extract_text(file_path)
 
-def process_image(file_path: str):
-    img = Image.open(file_path)
-    return pytesseract.image_to_string(img)
+# 🔹 NEW: Preprocess images (for mobile photos)
+def preprocess_image_for_ocr(image_path):
+    img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    
+    # Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+    # Deskew
+    coords = cv2.findNonZero(255 - gray)
+    angle = cv2.minAreaRect(coords)[-1]
+    if angle < -45: angle = -(90 + angle)
+    else: angle = -angle
+    (h, w) = gray.shape
+    M = cv2.getRotationMatrix2D((w//2, h//2), angle, 1.0)
+    gray = cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+    # Adaptive threshold (better for uneven lighting)
+    thresh = cv2.adaptiveThreshold(gray, 255,
+                                   cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, 11, 2)
+
+    # Noise removal
+    thresh = cv2.medianBlur(thresh, 3)
+
+    # Resize to improve OCR
+    thresh = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+
+    return thresh
+
+def process_image(file_path: str):
+    img = preprocess_image_for_ocr(file_path)
+    config = "--oem 3 --psm 6 -l eng --user-words med_terms.txt"
+    text = pytesseract.image_to_string(img, config=config)  # uniform block mode
+    return text
+
+# Lab value extraction
 def parse_lab_values(text: str):
     results = {}
-    # Demo parsing – replace with regex later
-    if "WBC" in text: results["WBC"] = analyze_value("WBC", 12000)
-    if "RBC" in text: results["RBC"] = analyze_value("RBC", 4.5)
-    if "HbA1c" in text: results["HbA1c"] = analyze_value("HbA1c", 8.0)
-    if "SGPT" in text: results["SGPT"] = analyze_value("SGPT", 70)
-    return results
 
+    # RBC (accepts "RBC 4.5" or "RBC: 4.5")
+    rbc_match = re.search(r"RBC[:\s]+([\d.]+)", text, re.IGNORECASE)
+    if rbc_match:
+        value = float(rbc_match.group(1))
+        results["RBC"] = analyze_value("RBC", value)
+
+    # WBC (accepts "WBC 7.8" or "WBC: 7800")
+    wbc_match = re.search(r"WBC[:\s]+([\d,.]+)", text, re.IGNORECASE)
+    if wbc_match:
+        value = float(wbc_match.group(1).replace(",", ""))
+        results["WBC"] = analyze_value("WBC", value)
+
+    # HbA1c
+    hba1c_match = re.search(r"HbA1c[:\s]+([\d.]+)", text, re.IGNORECASE)
+    if hba1c_match:
+        value = float(hba1c_match.group(1))
+        results["HbA1c"] = analyze_value("HbA1c", value)
+
+    # SGPT
+    sgpt_match = re.search(r"(SGPT|ALT)[:\s]+([\d.]+)", text, re.IGNORECASE)
+    if sgpt_match:
+        value = float(sgpt_match.group(2))
+        results["SGPT"] = analyze_value("SGPT", value)
+
+    return results
 
 @app.post("/register-user/")
 def register_user(
@@ -86,7 +139,6 @@ def register_user(
         "role": user.role
     }
 
-
 @app.post("/upload-report/")
 async def upload_report(
     file: UploadFile = File(...),
@@ -99,12 +151,20 @@ async def upload_report(
         if ext not in ["pdf", "png", "jpg", "jpeg"]:
             raise HTTPException(status_code=400, detail="Invalid file format")
 
+        # Check for duplicate
+        existing_report = db.query(Report).filter(
+            Report.user_id == user_id,
+            Report.file_name == file.filename
+        ).first()
+        if existing_report:
+            raise HTTPException(status_code=400, detail="Report already uploaded for this user")
+
         # Save file
         file_path = os.path.join(UPLOAD_DIR, file.filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extract text
+        # Extract text (PDF vs Image)
         text = process_pdf(file_path) if ext == "pdf" else process_image(file_path)
         if not text.strip():
             raise HTTPException(status_code=400, detail="No text extracted from file")
@@ -133,7 +193,7 @@ async def upload_report(
             "user_id": user_id,
             "report_id": report.id,
             "file_name": file.filename,
-            "extracted_text_preview": text[:200],  # only first 200 chars
+            "extracted_text_preview": text[:200],  # first 200 chars
             "lab_results": lab_results
         })
 
