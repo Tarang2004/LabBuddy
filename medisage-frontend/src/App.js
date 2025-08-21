@@ -12,6 +12,7 @@ const MediSage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [lastUploadResult, setLastUploadResult] = useState(null); // Move to main component level
 
   // API Base URL - adjust this to match your FastAPI server
   const API_BASE = 'http://localhost:8000';
@@ -174,7 +175,6 @@ const MediSage = () => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [selectedUserId, setSelectedUserId] = useState('');
     const [dragOver, setDragOver] = useState(false);
-    const [lastUploadResult, setLastUploadResult] = useState(null);
 
     const handleFileSelect = (file) => {
       const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
@@ -199,7 +199,6 @@ const MediSage = () => {
       }
 
       const result = await uploadReport(selectedFile, selectedUserId);
-      setLastUploadResult(result);
       
       if (result.success) {
         setSelectedFile(null);
@@ -367,7 +366,7 @@ const MediSage = () => {
                 Analysis Results
               </h3>
 
-              {lastUploadResult?.success && lastUploadResult.data.lab_results ? (
+              {lastUploadResult?.success && lastUploadResult.data.lab_results && Object.keys(lastUploadResult.data.lab_results).length > 0 ? (
                 <div>
                   <div className="grid grid-cols-1 gap-3 mb-4">
                     {Object.entries(lastUploadResult.data.lab_results).map(([name, data]) => (
@@ -394,7 +393,24 @@ const MediSage = () => {
                   </div>
                   <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
                     <p>📊 Lab values extracted and analyzed against reference ranges.</p>
+                    <p className="text-xs mt-1">File: {lastUploadResult.data.file_name}</p>
                   </div>
+                </div>
+              ) : lastUploadResult?.success && (!lastUploadResult.data.lab_results || Object.keys(lastUploadResult.data.lab_results).length === 0) ? (
+                <div className="text-center py-6 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <AlertTriangle className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
+                  <p className="text-yellow-800 font-medium">Report uploaded but no lab values found</p>
+                  <p className="text-sm text-yellow-600 mt-1">The OCR couldn't extract recognizable lab parameters</p>
+                  <div className="mt-3 text-xs text-yellow-700 bg-yellow-100 p-2 rounded">
+                    <p><strong>Supported parameters:</strong> WBC, RBC, HbA1c, SGPT/ALT</p>
+                    <p className="mt-1">Try uploading a clearer image or different report format</p>
+                  </div>
+                </div>
+              ) : lastUploadResult?.success === false ? (
+                <div className="text-center py-6 bg-red-50 rounded-lg border border-red-200">
+                  <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                  <p className="text-red-800 font-medium">Upload failed</p>
+                  <p className="text-sm text-red-600 mt-1">{lastUploadResult.error}</p>
                 </div>
               ) : (
                 <div className="text-center py-8">
